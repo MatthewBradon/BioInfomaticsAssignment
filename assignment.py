@@ -152,9 +152,7 @@ def main(dna_seq_file):
                 # Reverse-map amino acid positions.
                 # The codon at index 0 in the complement corresponds to the last codon in the original orientation.
                 aa_start = total_codons - start
-                aa_stop  = total_codons - stop + 1  - 1  # subtract 1 since stop codon is not included
-                aa_length = (total_codons - start) - (total_codons - stop + 1)
-                # Alternatively, you can compute aa_length as stop - start.
+                aa_stop  = total_codons - stop
                 aa_length = stop - start
                 log_file.write(f"Start (AA): {aa_start}, Stop (AA): {aa_stop}, Length: {aa_length} aa\n")
                 log_file.write(f"Start (NT): {orig_start_nt}, Stop (NT): {orig_stop_nt}, Length: {nt_length} nt\n")
