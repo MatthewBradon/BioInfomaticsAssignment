@@ -114,8 +114,8 @@ def main(dna_seq_file):
             log_file.write("Amino Acid Sequence:\n" + "".join(amino_acids) + "\n")
             log_file.write("Open Reading Frames:\n")
             for start, stop, start_nt, stop_nt, seq in orfs:
-                if len(seq) < 20:
-                    continue
+                # if len(seq) < 20:
+                #     continue
                 # For primary strand, convert 0-indexed AA positions to 1-indexed.
                 aa_start = start + 1
                 aa_stop = stop  # since the stop codon is not included in the protein sequence
@@ -143,8 +143,8 @@ def main(dna_seq_file):
             total_codons = len(codons)  # total codons in this reading frame on the complement
             
             for start, stop, comp_start_nt, comp_stop_nt, seq in orfs:
-                if len(seq) < 20:
-                    continue
+                # if len(seq) < 20:
+                #     continue
                 # Convert nucleotide coordinates from the complement to original coordinates.
                 orig_stop_nt = complement_to_original_pos(comp_stop_nt, seq_length)
                 orig_start_nt  = complement_to_original_pos(comp_start_nt, seq_length)
