@@ -201,6 +201,10 @@ def save_orfs_to_csv(orfs, reading_frame, strand, output_file):
         for start_aa, stop_aa, start_nt, stop_nt, aa_sequence in orfs:
             aa_length = stop_aa - start_aa  # AA length
             nt_length = stop_nt - start_nt + 1  # NT length
+
+            if strand == "-":
+                aa_sequence = aa_sequence[::-1]  # Reverse the amino acid sequence
+
             writer.writerow([start_aa, stop_aa, aa_length, start_nt, stop_nt, nt_length, reading_frame, strand, aa_sequence])
 
 def save_orf_csv(dna_seq_file, output_csv):
