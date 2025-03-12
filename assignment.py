@@ -1,7 +1,9 @@
 import sys
 import os
+import csv
 
-dna_seq_file = "DnaSeq.fasta"
+# Get rid of nested
+# If last position is stop 
 
 compliment_nucleotide = {
     "A": "T",
@@ -51,7 +53,7 @@ def read_codon(dna_seq, reading_frame_no=0):
     """
     return [(i + 1, dna_seq[i:i+3]) for i in range(reading_frame_no, len(dna_seq), 3) if len(dna_seq[i:i+3]) == 3]
 
-def get_possible_orfs(aminos, positions):
+def get_possible_orfs(aminos, positions, nested=False):
     """
     Identifies possible Open Reading Frames (ORFs) from an amino acid sequence.
     Returns a list of tuples:
@@ -59,24 +61,46 @@ def get_possible_orfs(aminos, positions):
     where start_index and stop_index are 0-indexed positions in the amino acid list,
     start_nt is the nucleotide position (first nucleotide of the start codon),
     and stop_nt is the nucleotide position (third nucleotide of the stop codon).
-    
-    Note: The protein sequence returned no longer includes the stop codon.
+    This function does not handle nested ORFs
     """
-    start_amino = "M"  # Start codon gives Methionine
-    stop_amino = "*"   # Stop codons
+    start_amino = "M"  # Start codon
+    stop_amino = "*"   # Stop codon
     orfs = []
-    start_positions = [i for i, a in enumerate(aminos) if a == start_amino]
-    stop_positions = [i for i, a in enumerate(aminos) if a == stop_amino]
     
-    for start in start_positions:
-        for stop in stop_positions:
-            if stop > start:
-                start_nt = positions[start]      # first base of start codon
-                stop_nt = positions[stop] + 2      # third base of stop codon
-                # Exclude the stop codon from the protein sequence.
-                protein_seq = "".join(aminos[start:stop])
-                orfs.append((start, stop, start_nt, stop_nt, protein_seq))
-                break  # use the first stop codon after the start
+    if nested:
+        start_positions = [i for i, a in enumerate(aminos) if a == start_amino]
+        stop_positions = [i for i, a in enumerate(aminos) if a == stop_amino]
+        
+        # Remove start positions that are before the current start and current stop position (remove nested ORFs).
+        for i, start in enumerate(start_positions):
+            for stop in stop_positions:
+                if stop > start:
+                    start_positions = start_positions[i:]
+                    break
+
+
+
+        for start in start_positions:
+            for stop in stop_positions:
+                if stop > start:
+                    start_nt = positions[start]      # first base of start codon
+                    stop_nt = positions[stop] + 2      # third base of stop codon
+                    # Exclude the stop codon from the protein sequence.
+                    protein_seq = "".join(aminos[start:stop+1])
+                    orfs.append((start, stop, start_nt, stop_nt, protein_seq))
+                    break  # use the first stop codon after the start
+    else:
+        start = None
+        for i, a in enumerate(aminos):
+            if a == start_amino and start is None:
+                start = i  # Set the first start codon
+            elif a == stop_amino and start is not None:
+                start_nt = positions[start]  # First base of start codon
+                stop_nt = positions[i] + 2   # Third base of stop codon
+                protein_seq = "".join(aminos[start:i+1])  # Exclude stop codon
+                orfs.append((start+1, i+1, start_nt, stop_nt, protein_seq))
+                start = None  # Reset start to avoid nested ORFs
+
     return orfs
 
 def complement_to_original_pos(pos, seq_length):
@@ -107,15 +131,18 @@ def main(dna_seq_file):
             # Translate each codon; skip those not in our CodonTable.
             amino_acids = [CodonTable[c] for c in actual_codons if c in CodonTable]
             positions = [c[0] for c in codons]
-            orfs = get_possible_orfs(amino_acids, positions)
+            orfs = get_possible_orfs(amino_acids, positions, nested=False)
             
             log_file.write(f"\nReading Frame {frame+1}:\n")
             log_file.write("Codons:\n" + " ".join(actual_codons) + "\n")
-            log_file.write("Amino Acid Sequence:\n" + "".join(amino_acids) + "\n")
-            log_file.write("Open Reading Frames:\n")
+            log_file.write("Amino Acid Sequence:\n" + "".join(amino_acids) + "\n\n")
+            log_file.write(f"Open Reading Frames:    Primary Strand {frame+1}\n")
             for start, stop, start_nt, stop_nt, seq in orfs:
-                # if len(seq) < 20:
-                #     continue
+                
+                # Skip ORFs that are too short.
+                if len(seq) < 30:
+                    continue
+                
                 # For primary strand, convert 0-indexed AA positions to 1-indexed.
                 aa_start = start + 1
                 aa_stop = stop  # since the stop codon is not included in the protein sequence
@@ -125,7 +152,10 @@ def main(dna_seq_file):
                 log_file.write(f"Start (NT): {start_nt}, Stop (NT): {stop_nt}, Length: {nt_length} nt\n")
                 log_file.write(f"AA Sequence: {seq}\n\n")
         
-        log_file.write("\nComplementary (Reverse) Strand ORFs:\n")
+        log_file.write("\n\n\n\n\n")
+        log_file.write(f"\nComplementary DNA Sequence (3' to 5'):\n{comp_dna_seq[::-1]}\n\n")
+
+        log_file.write("\nComplementary Strand ORFs:\n")
         # Process all three reading frames for the complementary strand.
         for frame in [0, 1, 2]:
             codons = read_codon(comp_dna_seq, frame)
@@ -134,17 +164,19 @@ def main(dna_seq_file):
             actual_codons = [c[1] for c in codons]
             amino_acids = [CodonTable[c] for c in actual_codons if c in CodonTable]
             positions = [c[0] for c in codons]
-            orfs = get_possible_orfs(amino_acids, positions)
+            orfs = get_possible_orfs(amino_acids, positions, nested=False)
             
             log_file.write(f"\nReading Frame {frame+1} (complement):\n")
-            log_file.write("Codons:\n" + " ".join(actual_codons) + "\n")
-            log_file.write("Amino Acid Sequence:\n" + "".join(amino_acids) + "\n")
-            log_file.write("Open Reading Frames:\n")
+            log_file.write("Codons:\n" + " ".join(actual_codons[::-1]) + "\n")
+            log_file.write("Amino Acid Sequence:\n" + "".join(amino_acids[::-1]) + "\n")
+            log_file.write(f"Open Reading Frames:    Complimentary Strand {frame+1}\n")
             total_codons = len(codons)  # total codons in this reading frame on the complement
             
             for start, stop, comp_start_nt, comp_stop_nt, seq in orfs:
-                # if len(seq) < 20:
-                #     continue
+                
+                # Skip ORFs that are too short.
+                if len(seq) < 30:
+                    continue
                 # Convert nucleotide coordinates from the complement to original coordinates.
                 orig_stop_nt = complement_to_original_pos(comp_stop_nt, seq_length)
                 orig_start_nt  = complement_to_original_pos(comp_start_nt, seq_length)
@@ -152,13 +184,56 @@ def main(dna_seq_file):
                 # Reverse-map amino acid positions.
                 # The codon at index 0 in the complement corresponds to the last codon in the original orientation.
                 aa_start = total_codons - start
-                aa_stop  = total_codons - stop + 1  - 1  # subtract 1 since stop codon is not included
+                aa_stop  = total_codons - stop
                 aa_length = (total_codons - start) - (total_codons - stop + 1)
                 # Alternatively, you can compute aa_length as stop - start.
                 aa_length = stop - start
                 log_file.write(f"Start (AA): {aa_start}, Stop (AA): {aa_stop}, Length: {aa_length} aa\n")
                 log_file.write(f"Start (NT): {orig_start_nt}, Stop (NT): {orig_stop_nt}, Length: {nt_length} nt\n")
-                log_file.write(f"AA Sequence: {seq}\n\n")
+                log_file.write(f"AA Sequence: {seq[::-1]}\n\n")
+
+def save_orfs_to_csv(orfs, reading_frame, strand, output_file):
+    """
+    Saves ORF data to a CSV file.
+    """
+    with open(output_file, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        for start_aa, stop_aa, start_nt, stop_nt, aa_sequence in orfs:
+            aa_length = stop_aa - start_aa  # AA length
+            nt_length = stop_nt - start_nt + 1  # NT length
+            writer.writerow([start_aa, stop_aa, aa_length, start_nt, stop_nt, nt_length, reading_frame, strand, aa_sequence])
+
+def save_orf_csv(dna_seq_file, output_csv):
+    dna_seq = read_dna_seq(dna_seq_file)
+    seq_length = len(dna_seq)
+    comp_dna_seq = compliment_strand(dna_seq)
+    
+    # Create CSV and write header
+    with open(output_csv, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(["Start (AA)", "Stop (AA)", "AA Length", "Start (NT)", "Stop (NT)", "NT Length", "Reading Frame", "Strand", "Amino Acid Sequence"])
+    
+    # Process all three reading frames for the primary strand
+    for frame in [0, 1, 2]:
+        codons = read_codon(dna_seq, frame)
+        if not codons:
+            continue
+        amino_acids = [CodonTable[c[1]] for c in codons if c[1] in CodonTable]
+        positions = [c[0] for c in codons]
+        orfs = get_possible_orfs(amino_acids, positions, nested=False)
+        save_orfs_to_csv(orfs, frame + 1, "+", output_csv)
+    
+    # Process all three reading frames for the complementary strand
+    for frame in [0, 1, 2]:
+        codons = read_codon(comp_dna_seq, frame)
+        if not codons:
+            continue
+        amino_acids = [CodonTable[c[1]] for c in codons if c[1] in CodonTable]
+        positions = [c[0] for c in codons]
+        orfs = get_possible_orfs(amino_acids, positions, nested=False)
+        save_orfs_to_csv(orfs, frame + 1, "-", output_csv)
+    
+    print(f"ORF data saved to {output_csv}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -172,3 +247,5 @@ if __name__ == "__main__":
         print("File is not a .fasta file")
         sys.exit(1)
     main(dna_seq_file)
+
+    save_orf_csv(dna_seq_file, "orf_data.csv")
