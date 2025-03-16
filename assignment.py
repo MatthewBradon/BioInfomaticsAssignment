@@ -2,8 +2,7 @@ import sys
 import os
 import csv
 
-# Get rid of nested
-# If last position is stop 
+csv_rows = []
 
 compliment_nucleotide = {
     "A": "T",
@@ -87,7 +86,10 @@ def get_possible_orfs(aminos, positions, nested=False):
                     stop_nt = positions[stop] + 2      # third base of stop codon
                     # Exclude the stop codon from the protein sequence.
                     protein_seq = "".join(aminos[start:stop+1])
-                    orfs.append((start, stop, start_nt, stop_nt, protein_seq))
+                    
+                    if len(protein_seq) > 10:
+                        orfs.append((start, stop, start_nt, stop_nt, protein_seq))
+                    
                     break  # use the first stop codon after the start
     else:
         start = None
@@ -98,7 +100,9 @@ def get_possible_orfs(aminos, positions, nested=False):
                 start_nt = positions[start]  # First base of start codon
                 stop_nt = positions[i] + 2   # Third base of stop codon
                 protein_seq = "".join(aminos[start:i+1])  # Exclude stop codon
-                orfs.append((start+1, i+1, start_nt, stop_nt, protein_seq))
+                if len(protein_seq) > 10:
+                    orfs.append((start+1, i+1, start_nt, stop_nt, protein_seq))
+                
                 start = None  # Reset start to avoid nested ORFs
 
     return orfs
@@ -140,7 +144,7 @@ def main(dna_seq_file):
             for start, stop, start_nt, stop_nt, seq in orfs:
                 
                 # Skip ORFs that are too short.
-                if len(seq) < 30:
+                if len(seq) < 10:
                     continue
                 
                 # For primary strand, convert 0-indexed AA positions to 1-indexed.
@@ -173,9 +177,8 @@ def main(dna_seq_file):
             total_codons = len(codons)  # total codons in this reading frame on the complement
             
             for start, stop, comp_start_nt, comp_stop_nt, seq in orfs:
-                
                 # Skip ORFs that are too short.
-                if len(seq) < 30:
+                if len(seq) < 10:
                     continue
                 # Convert nucleotide coordinates from the complement to original coordinates.
                 orig_stop_nt = complement_to_original_pos(comp_stop_nt, seq_length)
@@ -192,20 +195,32 @@ def main(dna_seq_file):
                 log_file.write(f"Start (NT): {orig_start_nt}, Stop (NT): {orig_stop_nt}, Length: {nt_length} nt\n")
                 log_file.write(f"AA Sequence: {seq[::-1]}\n\n")
 
-def save_orfs_to_csv(orfs, reading_frame, strand, output_file):
+
+def save_orfs_to_csv(orfs, reading_frame, strand, seq_length, full_aa_length, output_file):
     """
     Saves ORF data to a CSV file.
     """
+    for start_aa, stop_aa, start_nt, stop_nt, aa_sequence in orfs:
+        if strand == "-":
+            # Reverse the start and stop for the complementary strand. 3' to 5'
+            start_aa = full_aa_length - start_aa + 1
+            stop_aa = full_aa_length - stop_aa + 1
+            start_nt = complement_to_original_pos(start_nt, seq_length)
+            stop_nt = complement_to_original_pos(stop_nt, seq_length)
+
+        # Use abs to ensure positive values.
+        aa_length = abs(stop_aa - start_aa)  # AA length
+        nt_length = abs(stop_nt - start_nt) + 1  # NT length
+
+        row = [start_aa, stop_aa, aa_length, start_nt, stop_nt, nt_length, reading_frame, strand, aa_sequence]
+        csv_rows.append(row)
+
+def write_to_csv(output_file):
     with open(output_file, mode='a', newline='') as file:
         writer = csv.writer(file)
-        for start_aa, stop_aa, start_nt, stop_nt, aa_sequence in orfs:
-            aa_length = stop_aa - start_aa  # AA length
-            nt_length = stop_nt - start_nt + 1  # NT length
+        for row in csv_rows:
+            writer.writerow(row)
 
-            if strand == "-":
-                aa_sequence = aa_sequence[::-1]  # Reverse the amino acid sequence
-
-            writer.writerow([start_aa, stop_aa, aa_length, start_nt, stop_nt, nt_length, reading_frame, strand, aa_sequence])
 
 def save_orf_csv(dna_seq_file, output_csv):
     dna_seq = read_dna_seq(dna_seq_file)
@@ -223,9 +238,10 @@ def save_orf_csv(dna_seq_file, output_csv):
         if not codons:
             continue
         amino_acids = [CodonTable[c[1]] for c in codons if c[1] in CodonTable]
+        full_aa_length = len(amino_acids)
         positions = [c[0] for c in codons]
         orfs = get_possible_orfs(amino_acids, positions, nested=False)
-        save_orfs_to_csv(orfs, frame + 1, "+", output_csv)
+        save_orfs_to_csv(orfs, frame + 1, "+", seq_length, full_aa_length, output_csv)
     
     # Process all three reading frames for the complementary strand
     for frame in [0, 1, 2]:
@@ -235,8 +251,13 @@ def save_orf_csv(dna_seq_file, output_csv):
         amino_acids = [CodonTable[c[1]] for c in codons if c[1] in CodonTable]
         positions = [c[0] for c in codons]
         orfs = get_possible_orfs(amino_acids, positions, nested=False)
-        save_orfs_to_csv(orfs, frame + 1, "-", output_csv)
-    
+        save_orfs_to_csv(orfs, frame + 1, "-", seq_length, full_aa_length, output_csv)
+
+    csv_rows.sort(key=lambda x: x[5], reverse=True)
+
+    write_to_csv(output_csv)
+
+
     print(f"ORF data saved to {output_csv}")
 
 # This program outputs two files logs with more in depth information about ORF and codons and a csv with a summary of the ORF
