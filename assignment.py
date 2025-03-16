@@ -239,6 +239,7 @@ def save_orf_csv(dna_seq_file, output_csv):
     
     print(f"ORF data saved to {output_csv}")
 
+# This program outputs two files logs with more in depth information about ORF and codons and a csv with a summary of the ORF
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Invalid arguments. Please run the program as: python assignment.py <dna_seq_file>")
