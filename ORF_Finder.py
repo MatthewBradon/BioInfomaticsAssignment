@@ -33,11 +33,18 @@ CodonTable = {
 def read_dna_seq(file):
     """
     Reads a DNA sequence from a FASTA file.
-    Skips the first line (header) and returns the sequence as a string.
+    Checks if fasta file has valid header.
+    Skips the header and reads the rest of the file.
     """
     with open(file, "r") as f:
-        f.readline()  # Skip the header
-        return f.read().replace("\n", "")
+        first_line = f.readline()
+        if ">" not in first_line:
+            print("Invalid FASTA file")
+            sys.exit(1)
+        
+        # Read the rest of the file
+        dna_seq = f.read().replace("\n", "")
+        return dna_seq
 
 def compliment_strand(dna_seq):
     """
@@ -70,15 +77,6 @@ def get_possible_orfs(aminos, positions, nested=False):
         start_positions = [i for i, a in enumerate(aminos) if a == start_amino]
         stop_positions = [i for i, a in enumerate(aminos) if a == stop_amino]
         
-        # Remove start positions that are before the current start and current stop position (remove nested ORFs).
-        for i, start in enumerate(start_positions):
-            for stop in stop_positions:
-                if stop > start:
-                    start_positions = start_positions[i:]
-                    break
-
-
-
         for start in start_positions:
             for stop in stop_positions:
                 if stop > start:
