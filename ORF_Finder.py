@@ -261,7 +261,7 @@ def save_orf_csv(dna_seq_file, output_csv):
 # This program outputs two files logs with more in depth information about ORF and codons and a csv with a summary of the ORF
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        print("Invalid arguments. Please run the program as: python assignment.py <dna_seq_file>")
+        print("Invalid arguments. Please run the program as: python ORF_Finder.py <dna_seq_file>")
         sys.exit(1)
     dna_seq_file = sys.argv[1]
     if not os.path.exists(dna_seq_file):
